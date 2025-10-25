@@ -1,0 +1,77 @@
+# Azure Container Apps Configuration
+# Use this file as a template for deployment
+
+properties:
+  managedEnvironmentId: /subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.App/managedEnvironments/{environment-name}
+  configuration:
+    ingress:
+      external: true
+      targetPort: 3000
+      transport: auto
+      traffic:
+        - weight: 100
+          latestRevision: true
+    secrets:
+      - name: postgres-password
+        value: "" # Set via Azure CLI or Portal
+      - name: kafka-password
+        value: "" # Set via Azure CLI or Portal
+    registries:
+      - server: {your-acr-name}.azurecr.io
+        username: {your-acr-username}
+        passwordSecretRef: acr-password
+  template:
+    containers:
+      - image: {your-acr-name}.azurecr.io/roomies-microservice:latest
+        name: roomies-api
+        resources:
+          cpu: 0.5
+          memory: 1Gi
+        env:
+          - name: NODE_ENV
+            value: "production"
+          - name: PORT
+            value: "3000"
+          - name: POSTGRES_HOST
+            value: "your-cosmos-postgres-account.postgres.cosmos.azure.com"
+          - name: POSTGRES_PORT
+            value: "5432"
+          - name: POSTGRES_USER
+            value: "citus"
+          - name: POSTGRES_PASSWORD
+            secretRef: postgres-password
+          - name: POSTGRES_DB
+            value: "roomies_db"
+          - name: POSTGRES_SSL
+            value: "true"
+          - name: POSTGRES_SSL_REJECT_UNAUTHORIZED
+            value: "false"
+          - name: POSTGRES_MAX_CONNECTIONS
+            value: "20"
+          - name: LOG_LEVEL
+            value: "info"
+          - name: HEALTH_CHECK_ENABLED
+            value: "true"
+        probes:
+          - type: Liveness
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          - type: Readiness
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+    scale:
+      minReplicas: 1
+      maxReplicas: 10
+      rules:
+        - name: http-scaling
+          http:
+            metadata:
+              concurrentRequests: "100"
